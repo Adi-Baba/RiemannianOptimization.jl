@@ -1,5 +1,8 @@
 using Pkg
+# Ensure the environment uses the local, development version of the package.
+# This is crucial for running tests and benchmarks against the current code.
 Pkg.activate(@__DIR__)
+Pkg.develop(path="..")
 Pkg.instantiate()
 
 using RiemannianOptimization
@@ -42,8 +45,12 @@ function run_twisted_problem_benchmark()
     println(log_df)
 end
 
-# To run this benchmark:
-# 1. Start Julia in your project directory.
-# 2. Activate the project: `pkg> activate .`
-# 3. Include this file: `include("benchmarks/twisted_problem.jl")`
-# 4. Run the benchmark function: `run_twisted_problem_benchmark()`
+# This allows the script to be run directly from the command line,
+# e.g., `julia benchmarks/twisted_problem.jl`
+if abspath(PROGRAM_FILE) == @__FILE__
+    run_twisted_problem_benchmark()
+end
+
+# You can also run this benchmark interactively in a Julia REPL:
+# 1. `include("benchmarks/twisted_problem.jl")`
+# 2. `run_twisted_problem_benchmark()`

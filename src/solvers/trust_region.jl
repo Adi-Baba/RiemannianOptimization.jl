@@ -4,7 +4,7 @@ using LinearAlgebra # Added for vec and reshape
 using Base: size # Added for size(::Vector{Float64})
 
 function riemannian_trust_region(M::AbstractManifold, cost, grad!, hess_vec_prod!, x0;
-                                max_iters=100, tol=1e-8, initial_Δ=1.0)
+                                max_iters=100, tol=1e-8, step_tol=1e-12, initial_Δ=1.0)
     x = copy(x0)
     Δ = initial_Δ
 
@@ -39,6 +39,8 @@ function riemannian_trust_region(M::AbstractManifold, cost, grad!, hess_vec_prod
         s_vec = solve_tr_subproblem(g_vec, H_op, Δ)
         s = reshape(s_vec, Base.size(x)) # Reshape solution back to original tangent vector shape
 
+        norm_s = norm(M, x, s)
+
         # Evaluate step quality
         x_new = retract(M, x, s)
         f_x_new = cost(M, x_new)
@@ -49,14 +51,19 @@ function riemannian_trust_region(M::AbstractManifold, cost, grad!, hess_vec_prod
         @printf("%-5d %-12.4e %-12.4e %-12.4e %-10.4f\n", i, f_x, norm_g, Δ, ρ)
         push!(log_df, (iteration=i, cost=f_x, grad_norm=norm_g, delta=Δ, rho=ρ))
 
+        if norm_s < step_tol
+            println("\nSolver converged: step size ($norm_s) below tolerance ($step_tol) in $i iterations.")
+            return x_new, log_df
+        end
+
         if norm_g < tol
-            println("\nSolver converged to tolerance in $i iterations.")
+            println("\nSolver converged: gradient norm ($norm_g) below tolerance ($tol) in $i iterations.")
             return x, log_df
         end
 
         # Update point and trust radius
         if ρ > 0.1; x = x_new; end
-        if ρ > 0.75 && norm(M, x, s) > 0.9 * Δ; Δ = 2.0 * Δ; elseif ρ < 0.25; Δ /= 2.0; end
+        if ρ > 0.75 && norm_s > 0.9 * Δ; Δ = 2.0 * Δ; elseif ρ < 0.25; Δ /= 2.0; end
     end
 
     println("\nSolver stopped after reaching the maximum of $max_iters iterations.")

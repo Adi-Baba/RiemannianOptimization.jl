@@ -1,4 +1,9 @@
+using Pkg
+
+# Ensure the environment uses the local, development version of the package.
+# This is crucial for running tests and benchmarks against the current code.
 Pkg.activate(@__DIR__)
+Pkg.develop(path="..")
 Pkg.instantiate()
 
 using RiemannianOptimization
@@ -26,9 +31,15 @@ end
 
 function max_cut_hess_vec_prod!(M::RiemannianOptimization.Sphere, x, v, Hv, L)
     # Hessian of -xᵀLx is -2L.
-    # The Riemannian Hessian-vector product is P_x(-2L v), where P_x is the projection onto the tangent space.
-    Hv .= -2 * (L * v)
-    Hv .= project_tangent(M, x, Hv) # Project Hv onto the tangent space at x
+    # The Riemannian Hessian-vector product is Hess f(x)[v] = P_x(H_E f(x)[v]) - ⟨grad_E f(x), x⟩v
+    # For f(x) = -xᵀLx, grad_E f(x) = -2Lx and H_E f(x)[v] = -2Lv.
+    # The curvature term is -⟨-2Lx, x⟩v = 2(xᵀLx)v.
+    euclidean_hess_v = -2 * (L * v)
+    Hv .= project_tangent(M, x, euclidean_hess_v) # Project the Euclidean Hessian
+
+    # Add the curvature term. Note that -xᵀLx is the cost.
+    cost = max_cut_cost(M, x, L)
+    Hv .+= -2 * cost .* v
     return Hv
 end
 
@@ -77,9 +88,17 @@ end
 
 function procrustes_hess_vec_prod!(M::RiemannianOptimization.Stiefel, X, V, HV, A, B)
     # Euclidean Hessian of ||AX - B||_F^2 is 2AᵀA.
-    # Riemannian Hessian-vector product involves the Euclidean Hessian projected.
+    # The Riemannian Hessian includes a curvature term for the Stiefel manifold.
+    # Hess f(X)[V] = P_X( Hess_E f(X)[V] - V * sym(Xᵀ * grad_E f(X)) )
+    G_euclidean = 2 * A' * (A * X - B)
     HV_euclidean = 2 * A' * (A * V)
-    HV .= project_tangent(M, X, HV_euclidean) # Project onto the tangent space of the Stiefel manifold
+
+    # Curvature term: sym(X' * G_euclidean) * V. The order of multiplication is critical
+    # for the Hessian operator to be self-adjoint.
+    curvature_term = ((X' * G_euclidean) + (G_euclidean' * X)) / 2 * V
+
+    # Project the full Euclidean term onto the tangent space
+    HV .= project_tangent(M, X, HV_euclidean - curvature_term)
     return HV
 end
 
@@ -112,7 +131,7 @@ end
 
 function combined_cost(M::RiemannianOptimization.ProductManifold, p::AbstractVector, c)
     y = p[M.indices[1]]
-    z = reshape(p[M.indices[2]], Base.size(M.manifolds[2]))
+    z = reshape(p[M.indices[2]], size(M.manifolds[2]))
     return LinearAlgebra.norm(y - z)^2 + LinearAlgebra.norm(y)^2 + LinearAlgebra.norm(z - c)^2
 end
 
@@ -146,8 +165,16 @@ function combined_hess_vec_prod!(M::RiemannianOptimization.ProductManifold, p::A
     # Euclidean Hessian-vector product for z: -2V_y + 4V_z
     HV_z_euclidean = -2 * V_y + 4 * V_z
 
+    M_sphere = M.manifolds[2]
     # Project HV_z_euclidean onto the tangent space of the sphere at z
-    HV_z = project_tangent(M.manifolds[2], z, HV_z_euclidean)
+    HV_z = project_tangent(M_sphere, z, HV_z_euclidean)
+
+    # Add curvature term for the sphere component: -⟨∇_{E,z} f, z⟩ V_z
+    # ∇_{E,z} f = -2y + 4z - 2c
+    # ⟨∇_{E,z} f, z⟩ = -2yᵀz + 4zᵀz - 2cᵀz = -2yᵀz + 4 - 2cᵀz
+    # We subtract this term, which is equivalent to adding (2yᵀz - 4 + 2cᵀz)V_z
+    curvature_factor = 2 * dot(y, z) - 4 + 2 * dot(c, z)
+    HV_z .+= curvature_factor .* V_z
 
     HV[M.indices[1]] .= HV_y
     HV[M.indices[2]] .= vec(HV_z)
@@ -196,9 +223,12 @@ function run_all_hard_benchmarks()
     run_combined_benchmark()
 end
 
-# To run these benchmarks:
-# 1. Start Julia in your project directory.
-# 2. Activate the project: `pkg> activate .`
-# 3. Include this file: `include("benchmarks/hard_problems.jl")`
-# 4. Run all benchmarks: `run_all_hard_benchmarks()`
-#    Or run individual benchmarks: `run_max_cut_benchmark()`, `run_procrustes_benchmark()`, `run_combined_benchmark()`
+# This allows the script to be run directly from the command line,
+# e.g., `julia benchmarks/hard_problems.jl`
+if abspath(PROGRAM_FILE) == @__FILE__
+    run_all_hard_benchmarks()
+end
+
+# You can also run these benchmarks interactively in a Julia REPL:
+# 1. `include("benchmarks/hard_problems.jl")`
+# 2. `run_all_hard_benchmarks()` or run individual benchmarks like `run_max_cut_benchmark()`.

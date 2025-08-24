@@ -7,8 +7,8 @@ Perform a gradient descent optimization on the manifold `M`.
 
 # Arguments
 - `M`: The manifold to optimize on.
-- `f`: The cost function `f(p)`.
-- `grad_f`: The gradient of the cost function `grad_f(p)`.
+- `f`: The cost function `f(M, p)`.
+- `grad_f`: The gradient of the cost function `grad_f(M, p)`.
 - `p_initial`: The starting point for the optimization.
 
 # Keyword Arguments
@@ -18,8 +18,8 @@ Perform a gradient descent optimization on the manifold `M`.
 """
 function gradient_descent(
     M::AbstractManifold,
-    f,
-    grad_f,
+    f,      # f(M, p)
+    grad_f, # grad_f(M, p)
     p_initial;
     max_iters::Int=100,
     step_size::Float64=0.01,
@@ -29,16 +29,25 @@ function gradient_descent(
     
     for i in 1:max_iters
         # Compute gradient at the current point
-        g = grad_f(p)
+        # This check provides backward compatibility for functions with signature grad_f(p).
+        g = if applicable(grad_f, M, p)
+            grad_f(M, p)
+        elseif applicable(grad_f, p)
+            @warn "The signature `grad_f(p)` is deprecated. Please use `grad_f(M, p)`." maxlog=1
+            grad_f(p)
+        else
+            error("The provided gradient function `grad_f` has an unsupported signature. Expected `grad_f(M, p)` or `grad_f(p)`.")
+        end
         
         # Project gradient onto the tangent space (ensures correctness)
         g_proj = project_tangent(M, p, g)
         
         grad_norm = norm(M, p, g_proj)
         
-        println("Iteration: ", i, ", grad_norm: ", grad_norm, ", p: ", p, ", f(p): ", f(p))
+        # For debugging: println("Iteration: ", i, ", grad_norm: ", grad_norm)
         if grad_norm < grad_tol
-            return OptimizationResult(p, f(p), true, "Gradient norm tolerance reached.")
+            cost = applicable(f, M, p) ? f(M, p) : f(p)
+            return OptimizationResult(p, cost, true, "Gradient norm tolerance reached.")
         end
         
         # Descent direction
@@ -51,5 +60,6 @@ function gradient_descent(
         p = p_next
     end
     
-    return OptimizationResult(p, f(p), false, "Maximum iterations reached.")
+    cost = applicable(f, M, p) ? f(M, p) : f(p)
+    return OptimizationResult(p, cost, false, "Maximum iterations reached.")
 end

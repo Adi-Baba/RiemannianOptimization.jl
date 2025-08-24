@@ -1,172 +1,132 @@
 # RiemannianOptimization.jl
 
-[![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://Adi-Baba.github.io/RiemannianOptimization.jl/stable)
-[![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://Adi-Baba.github.io/RiemannianOptimization.jl/dev)
-[![Build Status](https://github.com/Adi-Baba/RiemannianOptimization.jl/actions/workflows/CI.yml/badge.svg)](https://github.com/Adi-Baba/RiemannianOptimization.jl/actions/workflows/CI.yml)
-[![codecov](https://codecov.io/gh/Adi-Baba/RiemannianOptimization.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/Adi-Baba/RiemannianOptimization.jl)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Julia](https://img.shields.io/badge/Julia-1.6%2B-purple.svg)](https://julialang.org/)
+A Julia package for performing optimization on Riemannian manifolds. It provides a flexible framework for defining manifolds, cost functions, and using advanced solvers like the Riemannian Trust-Region method.
 
-A high-performance Julia package for Riemannian optimization, providing state-of-the-art algorithms for constrained optimization on manifolds with automatic differentiation support.
+This library is designed to be both educational and performant, with clear implementations of core concepts in Riemannian geometry and optimization.
 
-## 🌟 Features
+## Features
 
-### 📐 Supported Manifolds
-- **Euclidean(n)**: n-dimensional Euclidean space
-- **Sphere(n)**: n-dimensional sphere embedded in Rⁿ⁺¹
-- **Stiefel(n, p)**: Stiefel manifold of n×p orthogonal matrices
-- **SO(3)**: Special orthogonal group for 3D rotations
-- **ProductManifold**: Composition of multiple manifolds
+- **Type-Dispatch Manifold System**: Easily define and work with different manifolds.
+- **High-Performance Solvers**: Includes Gradient Descent and a Hessian-free Trust-Region solver.
+- **Common Manifolds**: Built-in support for `Euclidean`, `Sphere`, `Stiefel`, and `ProductManifold`.
+- **Automatic Differentiation**: Comes with a simple, dependency-free forward-mode AD engine (`ScalarAD.jl`) for computing gradients and Hessian-vector products.
+- **Benchmark Suite**: Includes examples for standard optimization problems like Rosenbrock, Max-Cut, and Orthogonal Procrustes.
 
-### ⚡ Optimization Algorithms
-- **Riemannian Gradient Descent**: First-order optimization with adaptive step sizes
-- **Riemannian Trust-Region**: Second-order, Hessian-free method with superior convergence
-- **Custom Solver Support**: Flexible interface for implementing custom algorithms
+## Installation
 
-### 🧮 Automatic Differentiation
-- **ScalarAD**: Simple dual numbers for basic differentiation
-- **HyperDualAD**: Hyperdual numbers for exact Hessian computation
-- **ChunkedAD**: High-performance chunked forward-mode AD
-- **Non-allocating API**: Configuration objects for performance-critical applications
-
-### 🚀 Performance Features
-- **StaticArrays integration**: Stack-allocated arrays for maximum performance
-- **Non-allocating operations**: Zero-allocation gradient and Hessian computations
-- **Chunked evaluation**: Simultaneous derivative computation for efficiency
-- **Precompilation**: Reduced latency for better user experience
-
-## 📦 Installation
-
-The package can be installed from the Julia REPL:
+Since this is a local package, you can add it to your Julia environment by specifying its path. From the Julia REPL, enter Pkg mode by pressing `]` and then run:
 
 ```julia
-using Pkg
-Pkg.add(url="https://github.com/Adi-Baba/RiemannianOptimization.jl")
+pkg> develop "path/to/RiemannianOptimization.jl"
 ```
 
-After adding the package, it's crucial to activate the project environment and instantiate its dependencies to ensure all modules are correctly loaded:
+## Quick Start: Optimizing the Rosenbrock Function
 
-```julia
-using Pkg
-Pkg.activate(".")
-Pkg.instantiate()
-```
-
-## 🚀 Quick Start
-
-### Basic Example: Sphere Optimization
-
-
-
-```julia
-using Pkg
-Pkg.activate(@__DIR__) # or Pkg.activate(".") if running from project root
-Pkg.instantiate()
-
-using RiemannianOptimization
-using LinearAlgebra
-
-# Minimize the z-coordinate on a sphere
-M = Sphere(3)
-f(M, p) = p[3]  # Objective function
-# Initial point (normalized to lie on the sphere)
-p0 = normalize([1.0, 1.0, 1.0])
-
-# Run the Riemannian Gradient Descent optimizer
-# The `verbose=true` argument prints iteration details, similar to the log you provided.
-result = gradient_descent(M, f, p0; max_iter=3000)
-
-println("\nOptimization finished.")
-println("Optimal point: ", result.p)
-println("Optimal value: ", result.cost)
-
-# Expected output:
-# The optimizer will converge to a point close to [0.0, 0.0, -1.0],
-# which is the minimum of the z-coordinate on the 3-sphere.
-
-## 📝 Citation
-
-## 📊 Benchmarks
-
-You can evaluate the performance of `RiemannianOptimization.jl` using the following benchmark suite, which leverages `BenchmarkTools.jl`.
-
-First, ensure `BenchmarkTools` is added to your project environment:
-```julia
-using Pkg
-Pkg.add("BenchmarkTools")
-```
-
-Now, you can copy and paste the following code into your Julia session to run the benchmarks:
+Here is a complete example of how to use the Riemannian Trust-Region solver to find the minimum of the 2D Rosenbrock function on the Euclidean manifold.
 
 ```julia
 using RiemannianOptimization
-using BenchmarkTools
-using LinearAlgebra
 
-println("\n--- Running RiemannianOptimization Benchmarks ---")
+# 1. Define the manifold
+M = Euclidean(2)
 
-# --- Sphere Optimization (Gradient Descent) ---
-println("\nBenchmarking Sphere Optimization (Gradient Descent)...")
-
-# Define a setup function for the benchmark to avoid including setup time in measurement
-function setup_sphere_gd()
-    M = Sphere(3)
-    f(M, p) = p[3]
-    x0 = [1/√2, 1/√2, 0.0]
-    grad_f(M, p) = ScalarAD.gradient(p_ -> f(M, p_), p)
-    return (M, f, grad_f, x0)
+# 2. Define the cost function and its derivatives
+function rosenbrock_cost(M::Euclidean, x)
+    return (1 - x[1])^2 + 100 * (x[2] - x[1]^2)^2
 end
 
-@benchmark gradient_descent(M, f, grad_f, x0; step_size=0.005, max_iter=10000, grad_tol=1e-6) setup=((M, f, grad_f, x0) = setup_sphere_gd()) evals=1 samples=10
-
-# --- Euclidean Optimization (Gradient Descent) ---
-println("\nBenchmarking Euclidean Optimization (Gradient Descent)...")
-
-function setup_euclidean_gd()
-    M = Euclidean(2)
-    f(M, x) = x[1]^2 + x[2]^2
-    x0 = [2.0, 2.0]
-    grad_f(M, x) = ScalarAD.gradient(x_ -> f(M, x_), x)
-    return (M, f, grad_f, x0)
+function rosenbrock_grad!(M::Euclidean, x, g)
+    g[1] = -2 * (1 - x[1]) - 400 * x[1] * (x[2] - x[1]^2)
+    g[2] = 200 * (x[2] - x[1]^2)
+    return g
 end
 
-@benchmark gradient_descent(M, f, grad_f, x0; step_size=0.1, max_iter=100, grad_tol=1e-6) setup=((M, f, grad_f, x0) = setup_euclidean_gd()) evals=1 samples=10
-
-# --- Trust Region Optimization (using HyperDualAD for Hessian) ---
-println("\nBenchmarking Trust Region Optimization (using HyperDualAD)...")
-
-function setup_trust_region()
-    M = Euclidean(2)
-    f(M, x) = x[1]^4 + x[2]^4
-    x0 = [2.0, 2.0]
-    # Define gradient and Hessian functions using HyperDualAD
-    grad!(M, x, g) = begin
-        g_computed = ScalarAD.gradient(x_ -> f(M, x_), x)
-        g .= g_computed
-    end
-    hess_vec_prod!(M, x, v, Hv) = begin
-        H_computed = HyperDualAD.hessian(x_ -> f(M, x_), x)
-        Hv .= H_computed * v
-    end
-    return (M, f, grad!, hess_vec_prod!, x0)
+function rosenbrock_hess_vec_prod!(M::Euclidean, x, v, Hv)
+    Hv[1] = (2 - 400 * x[2] + 1200 * x[1]^2) * v[1] - 400 * x[1] * v[2]
+    Hv[2] = -400 * x[1] * v[1] + 200 * v[2]
+    return Hv
 end
 
-@benchmark riemannian_trust_region(M, f, grad_f, hess_f, x0) setup=((M, f, grad_f, hess_f, x0) = setup_trust_region()) evals=1 samples=10
+# 3. Set an initial point and run the solver
+x0 = [-1.2, 1.0]
+x_min, log_df = riemannian_trust_region(
+    M,
+    rosenbrock_cost,
+    rosenbrock_grad!,
+    rosenbrock_hess_vec_prod!,
+    x0
+)
 
-println("\n--- Benchmarks Complete ---")
+# 4. Print the results
+println("\nOptimization complete.")
+println("Minimum found at: ", x_min)
+println("Cost at minimum: ", rosenbrock_cost(M, x_min))
 ```
 
-If you use RiemannianOptimization.jl in your research, please cite:
+### Expected Output
 
-```bibtex
-@software{RiemannianOptimization,
-  author = {Aditya},
-  title = {RiemannianOptimization.jl: Optimization on Manifolds in Julia},
-  year = {2025},
-  url = {https://github.com/Adi-Baba/RiemannianOptimization.jl}
-}
+The solver will print its progress and converge to the known minimum at `[1.0, 1.0]`.
+
+```
+--- Starting Riemannian Trust-Region Solver (Hessian-Free) ---
+Iter  Cost         |g|          Δ            ρ
+-------------------------------------------------------
+1     2.4200e+01   2.3287e+02   1.0000e+00   1.0028
+2     4.7319e+00   4.6394e+00   1.0000e+00   -0.4143
+...
+24    1.0611e-13   3.3800e-07   2.5000e-01   0.0001
+
+Solver converged: step size (3.1851e-13) below tolerance (1e-12) in 24 iterations.
+
+Optimization complete.
+Minimum found at: [0.9999996743780089, 0.9999993478371609]
+Cost at minimum: 1.0611413038132374e-13
 ```
 
-## 📜 License
+## Advanced Usage: Optimization on the Sphere
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This library can solve problems on non-Euclidean manifolds. For example, the Max-Cut problem can be formulated as maximizing `x'Lx` subject to `x` being on the n-sphere.
+
+To solve this, you would:
+1.  Define the `Sphere` manifold: `M = Sphere(n-1)`.
+2.  Implement the cost, gradient, and Hessian-vector product specific to the Sphere manifold, using `project_tangent` to ensure vectors lie in the correct tangent space.
+3.  Call the solver as before.
+
+You can find a full implementation of this and other complex problems in the `benchmarks/` directory.
+
+## Available Components
+
+### Solvers
+
+- `riemannian_trust_region`: A robust, second-order method for finding local minima. Requires a Hessian-vector product.
+- `gradient_descent`: A simple, first-order method. Requires only the gradient.
+
+### Manifolds
+
+- `Euclidean(n)`: Standard n-dimensional Euclidean space.
+- `Sphere(n)`: The n-dimensional sphere embedded in `R^(n+1)`.
+- `Stiefel(n, p)`: The Stiefel manifold of `p` orthonormal frames in `R^n`.
+- `ProductManifold(M1, M2, ...)`: A manifold constructed as the Cartesian product of other manifolds.
+
+## Running Benchmarks
+
+The project includes a set of benchmarks to test solver performance on various problems. To run them, navigate to the `benchmarks/` directory and execute the scripts with Julia.
+
+```bash
+# From the root directory of the project
+cd benchmarks
+
+# Run the Rosenbrock benchmark
+julia twisted_problem.jl
+
+# Run the Max-Cut, Procrustes, and Product Manifold benchmarks
+julia hard_problems.jl
+```
+
+## Contributing
+
+Contributions are welcome! Please feel free to open an issue to report a bug or suggest a feature. If you would like to contribute code, please open a pull request.
+
+## License
+
+This project is licensed under the MIT License.
