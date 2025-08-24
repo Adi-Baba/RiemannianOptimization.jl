@@ -17,7 +17,8 @@ This library is designed to be both educational and performant, with clear imple
 Since this is a local package, you can add it to your Julia environment by specifying its path. From the Julia REPL, enter Pkg mode by pressing `]` and then run:
 
 ```julia
-pkg> develop "path/to/RiemannianOptimization.jl"
+pkg> using Pkg
+pkg> Pkg.add(url="https://github.com/Adi-Baba/RiemannianOptimization.jl")
 ```
 
 ## Quick Start: Optimizing the Rosenbrock Function
